@@ -24,11 +24,6 @@
    Only the first 8 bytes are used and the NULL terminator discarded. */
 #define FILE_SYSTEM_SIGNATURE "FFileSys"
 
-/* The size of the FLASH on the device to search through for the file
-   system signature. */
-#define FILE_SYSTEM_FLASH_SIZE  (512 * 1024)
-
-
 /* Header stored at the beginning of the file system image. */
 typedef struct _SFileSystemHeader
 {

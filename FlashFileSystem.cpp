@@ -402,12 +402,17 @@ static int _CompareKeyToFileEntry(const void* pvKey, const void* pvEntry)
    Parameters:
     pName is the root name to be used for this file system in fopen()
         pathnames.
+    pFlashDrive (optional) is a pointer to the read-only file system (const char array).
+        When pFlashDrive is not specified, it is up to the user to append the
+        read-only file system file to the compiled binary.
+    FlashSize (optional) is the size of the FLASH (KB) on the device to
+        search through for the file system signature (default = 512).
 */
-FlashFileSystem::FlashFileSystem(const char* pName) : FileSystemLike(pName)
+FlashFileSystem::FlashFileSystem(const char* pName, const uint8_t *pFlashDrive, const uint32_t FlashSize) : FileSystemLike(pName)
 {
     static const char   FileSystemSignature[] = FILE_SYSTEM_SIGNATURE;
     SFileSystemHeader*  pHeader = NULL;
-    char*               pCurr = (char*)FILE_SYSTEM_FLASH_SIZE - sizeof(pHeader->FileSystemSignature);
+    char*               pCurr = (char*)(FlashSize * 1024) - sizeof(pHeader->FileSystemSignature);
     
     // Initialize the members
     m_pFLASHBase = NULL;
@@ -417,18 +422,25 @@ FlashFileSystem::FlashFileSystem(const char* pName) : FileSystemLike(pName)
     // Scan backwards through 512k FLASH looking for the file system signature
     // NOTE: The file system image should be located after this code itself
     //       so stop the search.
-    while (pCurr > FileSystemSignature)
+    if(pFlashDrive == NULL)
     {
-        if (0 == memcmp(pCurr, FileSystemSignature, sizeof(pHeader->FileSystemSignature)))
+        while (pCurr > FileSystemSignature)
         {
-            break;
+            if (0 == memcmp(pCurr, FileSystemSignature, sizeof(pHeader->FileSystemSignature)))
+            {
+                break;
+            }
+            pCurr--;
         }
-        pCurr--;
+        if (pCurr <= FileSystemSignature)
+        {
+            TRACE("FlashFileSystem: Failed to find file system image in ROM.\n");
+            return;
+        }
     }
-    if (pCurr <= FileSystemSignature)
+    else
     {
-        TRACE("FlashFileSystem: Failed to find file system image in RAM.\n");
-        return;
+        pCurr = (char *)pFlashDrive;
     }
     if (((unsigned int)pCurr & 0x3) != 0)
     {

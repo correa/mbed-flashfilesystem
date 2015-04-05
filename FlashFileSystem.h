@@ -121,22 +121,40 @@ protected:
 
 
 
-/** A filesystem for accessing a read-only file system placed in the internal
- *  FLASH memory of the NXP chip on the mbed board.
+/** A filesystem for accessing a read-only file system placed in the internal\n
+ *  FLASH memory of the mbed board.
+ *\n
+ *  The file system to be mounted by this file system should be created through\n
+ *  the use of the fsbld utility on the PC.\n
+ *\n
+ *  As fsbld creates two output files (a binary and a header file), there are two\n
+ *  ways to add the resulting file system image:\n
+ *  -# Concatenate the binary file system to the end of the .bin file created\n
+ *     by the mbed online compiler before uploading to the mbed device.\n
+ *  -# Import the header file into your project, include this file in your main\n
+ *     file and add 'roFlashDrive' to the FlashfileSystem constructor call.\n
+ *     eg : static FlashFileSystem flash("flash", roFlashDrive);\n
  *
- *  The file system to be mounted by this file system should be created through
- *  the use of the fsbld utility on the PC and the resulting file system image
- *  concatentated to the end of the .bin file created by the mbed online
- *  compiler before uploading to the mbed device.
- *
- *  NOTE: This file system is case-sensitive.  Calling fopen("/flash/INDEX.html")
- *        won't successfully open a file named index.html in the root directory
- *        of the flash file system.
+ *  A third (optional) parameter in the FlashfileSystem constructor call allows\n
+ *  you to specify the size of the FLASH (KB) on the device (default = 512).\n
+ *  eg (for a KL25Z device) : static FlashFileSystem flash("flash", NULL, 128);\n
+ *  Note that in this example, the pointer to the header file has been omitted,\n
+ *  so we need to append the binary file system ourselves (see above).\n
+ *  When you use the binary file system header in your main file, you can\n
+ *  use the roFlashDrive pointer.\n
+ *  eg (for a KL25Z device) : static FlashFileSystem flash("flash", roFlashDrive, 128);\n
+ *\n
+ *  NOTE: This file system is case-sensitive.  Calling fopen("/flash/INDEX.html")\n
+ *        won't successfully open a file named index.html in the root directory\n
+ *        of the flash file system.\n
  *
  * Example:
  * @code
 #include <mbed.h>
 #include "FlashFileSystem.h"
+// Uncomment the line below when you imported the header file built with fsbld
+// and replace <Flashdrive> with its correct filename
+//#include "<FlashDrive>.h"
 
 static void _RecursiveDir(const char* pDirectoryName, DIR* pDirectory = NULL)
 {
@@ -210,7 +228,11 @@ int main()
     char               Buffer[128];
 
     // Create the file system under the name "flash".
+    // NOTE : When you include the the header file built with fsbld,
+    //        disable the first static FlashFileSystem... line
+    //        and enable the second static FlashFileSystem... line.
     static FlashFileSystem flash("flash");
+//    static FlashFileSystem flash("flash, roFlashDrive");
     if (!flash.IsMounted())
     {
         error("Failed to mount FlashFileSystem.\r\n");
@@ -261,7 +283,7 @@ int main()
 class FlashFileSystem : public FileSystemLike 
 {
 public:
-    FlashFileSystem(const char* pName);
+    FlashFileSystem(const char* pName, const uint8_t *pFlashDrive = NULL, const uint32_t FlashSize = 512);
     
     virtual FileHandle* open(const char* pFilename, int Flags);
     virtual DirHandle*  opendir(const char *pDirectoryName);
