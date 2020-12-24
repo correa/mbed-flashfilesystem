@@ -29,20 +29,18 @@ struct _SFileSystemEntry;
 
 
 // Represents an opened file object in the FlashFileSystem.
-class FlashFileSystemFileHandle : public FileHandle 
+class FlashFileSystemFileHandle : public mbed::FileHandle 
 {
 public:
     FlashFileSystemFileHandle();
     FlashFileSystemFileHandle(const char* pFileStart, const char* pFileEnd);
     
     // FileHandle interface methods.
-    virtual ssize_t write(const void* buffer, size_t length);
-    virtual int close();
-    virtual ssize_t read(void* buffer, size_t length);
-    virtual int isatty();
-    virtual off_t lseek(off_t offset, int whence);
-    virtual int fsync();
-    virtual off_t flen();
+    virtual ssize_t write(const void* buffer, size_t length) override;
+    virtual int close() override;
+    virtual ssize_t read(void* buffer, size_t length) override;
+    virtual off_t seek(off_t offset, int whence) override;
+    virtual off_t size() override;
 
     // Used by FlashFileSystem to maintain entries in its handle table.
     void SetEntry(const char* pFileStart, const char* pFileEnd)
@@ -54,6 +52,22 @@ public:
     int IsClosed()
     {
         return (NULL == m_pFileStart);
+    }
+
+    /** Check for poll event flags
+     * You can use or ignore the input parameter. You can return all events
+     * or check just the events listed in events.
+     * Call is nonblocking - returns instantaneous state of events.
+     * Whenever an event occurs, the derived class should call the sigio() callback).
+     *
+     * @param events        bitmask of poll events we're interested in - POLLIN/POLLOUT etc.
+     *
+     * @returns             bitmask of poll events that have occurred.
+     */
+    virtual short poll(short events) const override
+    {
+        // Only readable is true
+        return POLLIN;
     }
     
 protected:
@@ -95,11 +109,11 @@ class FlashFileSystemDirHandle : public DirHandle
     }
     
     // Methods defined by DirHandle interface.
-    virtual int    closedir();
-    virtual struct dirent *readdir();
-    virtual void   rewinddir();
-    virtual off_t  telldir();
-    virtual void   seekdir(off_t location);
+    virtual int    close() override;
+    virtual ssize_t read(struct dirent *ent) override;
+    virtual void   rewind() override;
+    virtual off_t  tell() override;
+    virtual void   seek(off_t location) override;
 
 protected:
     // The first file entry for this directory.  rewinddir() takes the
@@ -232,7 +246,7 @@ int main()
     //        disable the first static FlashFileSystem... line
     //        and enable the second static FlashFileSystem... line.
     static FlashFileSystem flash("flash");
-//    static FlashFileSystem flash("flash, roFlashDrive");
+//    static FlashFileSystem flash("flash", roFlashDrive);
     if (!flash.IsMounted())
     {
         error("Failed to mount FlashFileSystem.\r\n");
@@ -280,13 +294,13 @@ int main()
 }
  * @endcode
  */
-class FlashFileSystem : public FileSystemLike 
+class FlashFileSystem : public mbed::FileSystemLike 
 {
 public:
     FlashFileSystem(const char* pName, const uint8_t *pFlashDrive = NULL, const uint32_t FlashSize = 512);
     
-    virtual FileHandle* open(const char* pFilename, int Flags);
-    virtual DirHandle*  opendir(const char *pDirectoryName);
+    virtual int open(FileHandle** file, const char* pFilename, int Flags) override;
+    virtual int  open(DirHandle** dir, const char *pDirectoryName) override;
 
     virtual int         IsMounted() { return (m_FileCount != 0); }
 

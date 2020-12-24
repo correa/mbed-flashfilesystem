@@ -120,19 +120,6 @@ ssize_t FlashFileSystemFileHandle::read(void* pBuffer, size_t Length)
 }
 
 
-/* Check if the handle is for a interactive terminal device .
-
-   Parameters
-    None
-   Returns
-    1 if it is a terminal, 0 otherwise
-*/
-int FlashFileSystemFileHandle::isatty()
-{
-    return 0;
-}
-
-
 /* Move the file position to a given offset from a given location.
  
    Parameters
@@ -144,7 +131,7 @@ int FlashFileSystemFileHandle::isatty()
    Returns
     New file position on success, -1 on failure or unsupported
 */
-off_t FlashFileSystemFileHandle::lseek(off_t offset, int whence)
+off_t FlashFileSystemFileHandle::seek(off_t offset, int whence)
 {
     switch(whence)
     {
@@ -166,19 +153,6 @@ off_t FlashFileSystemFileHandle::lseek(off_t offset, int whence)
 }
 
 
-/* Flush any buffers associated with the FileHandle, ensuring it
-   is up to date on disk.  Since the Flash file system is read-only, there
-   is nothing to do here.
-  
-   Returns
-    0 on success or un-needed, -1 on error
-*/
-int FlashFileSystemFileHandle::fsync()
-{
-    return 0;
-}
-
-
 /* Returns the length of the file.
 
    Parameters:
@@ -186,7 +160,7 @@ int FlashFileSystemFileHandle::fsync()
    Returns:
     Length of file.
 */
-off_t FlashFileSystemFileHandle::flen()
+off_t FlashFileSystemFileHandle::size()
 {
     return (m_pFileEnd - m_pFileStart);
 }
@@ -233,7 +207,7 @@ FlashFileSystemDirHandle::FlashFileSystemDirHandle()
    Returns:
     0 on success, or -1 on error.
 */
-int FlashFileSystemDirHandle::closedir()
+int FlashFileSystemDirHandle::close()
 {
     m_pFLASHBase = NULL;
     m_pFirstFileEntry = NULL;
@@ -253,11 +227,9 @@ int FlashFileSystemDirHandle::closedir()
     None.
     
    Returns:
-    A pointer to a dirent structure representing the
-    directory entry at the current position, or NULL on reaching
-    end of directory or error.
+    1 on reading a filename, 0 at end of directory, negative error on failure.
 */
-struct dirent* FlashFileSystemDirHandle::readdir()
+ssize_t FlashFileSystemDirHandle::read(struct dirent *ent)
 {
     const char*  pPrevEntryName;
     const char*  pCurrentEntryName;
@@ -271,7 +243,7 @@ struct dirent* FlashFileSystemDirHandle::readdir()
     if (!m_pCurrentFileEntry)
     {
         m_DirectoryEntry.d_name[0] = '\0';
-        return NULL;
+        return 0;
     }
     
     // Calculate the number of valid entries are left in the file entry array.
@@ -318,12 +290,13 @@ struct dirent* FlashFileSystemDirHandle::readdir()
     
     // Return a pointer to the directory entry structure that was previously
     // setup.
-    return &m_DirectoryEntry;
+    ent = &m_DirectoryEntry;
+    return 1;
 }
 
 
 //Resets the position to the beginning of the directory.
-void FlashFileSystemDirHandle::rewinddir()
+void FlashFileSystemDirHandle::rewind()
 {
     m_pCurrentFileEntry = m_pFirstFileEntry;
 }
@@ -337,7 +310,7 @@ void FlashFileSystemDirHandle::rewinddir()
    Returns:
     The current position, or -1 on error.
 */
-off_t FlashFileSystemDirHandle::telldir()
+off_t FlashFileSystemDirHandle::tell()
 {
     return (off_t)m_pCurrentFileEntry;
 }
@@ -352,7 +325,7 @@ off_t FlashFileSystemDirHandle::telldir()
    Returns;
     Nothing.
 */
-void FlashFileSystemDirHandle::seekdir(off_t Location)
+void FlashFileSystemDirHandle::seek(off_t Location)
 {
     SFileSystemEntry*   pLocation = (SFileSystemEntry*)Location;
     
@@ -466,7 +439,7 @@ FlashFileSystem::FlashFileSystem(const char* pName, const uint8_t *pFlashDrive, 
    Returns NULL if an error was encountered or a pointer to a FileHandle object
     representing the requrested file otherwise.
 */
-FileHandle* FlashFileSystem::open(const char* pFilename, int Flags)
+int FlashFileSystem::open(FileHandle** file, const char* pFilename, int Flags)
 {
     const SFileSystemEntry*     pEntry = NULL;
     FlashFileSystemFileHandle*  pFileHandle = NULL;
@@ -477,13 +450,14 @@ FileHandle* FlashFileSystem::open(const char* pFilename, int Flags)
     // Can't find the file if file system hasn't been mounted.
     if (!IsMounted())
     {
-        return NULL;
+        return -ENODEV;
     }
 
     // Can only open files in FLASH for read.
     if (O_RDONLY != Flags)
     {
         TRACE("FlashFileSystem: Can only open files for reading.\r\n");
+        return -EROFS;
     }
     
     // Attempt to find the specified file in the file system image.
@@ -498,7 +472,7 @@ FileHandle* FlashFileSystem::open(const char* pFilename, int Flags)
     {
         // Create failure response.
         TRACE("FlashFileSystem: Failed to find '%s' in file system image.\n", pFilename);
-        return NULL;
+        return -ENOENT;
     }
 
     // Attempt to find a free file handle.
@@ -506,16 +480,17 @@ FileHandle* FlashFileSystem::open(const char* pFilename, int Flags)
     if (!pFileHandle)
     {
         TRACE("FlashFileSystem: File handle table is full.\n");
-        return NULL;
+        return -ENOSR;
     }
     
     // Initialize the file handle and return it to caller.
     pFileHandle->SetEntry(m_pFLASHBase + pEntry->FileBinaryOffset,
                           m_pFLASHBase + pEntry->FileBinaryOffset + pEntry->FileBinarySize);
-    return pFileHandle;
+    *file = pFileHandle;
+    return 0;
 }
 
-DirHandle*  FlashFileSystem::opendir(const char *pDirectoryName)
+int  FlashFileSystem::open(DirHandle** dir, const char *pDirectoryName)
 {
     const SFileSystemEntry* pEntry = m_pFileEntries;
     unsigned int            DirectoryNameLength;
@@ -563,7 +538,8 @@ DirHandle*  FlashFileSystem::opendir(const char *pDirectoryName)
                                  m_FileCount - (pEntry - m_pFileEntries),
                                  DirectoryNameLength);
             
-            return pDirHandle;
+            *dir = pDirHandle;
+            return 0;
         }
         
         // Advance to the next file entry
@@ -573,7 +549,7 @@ DirHandle*  FlashFileSystem::opendir(const char *pDirectoryName)
     // Get here when the requested directory wasn't found.
     TRACE("FlashFileSystem: Failed to find '%s' directory in file system image.\n", 
           pDirectoryName);
-    return NULL;
+    return -ENOENT;
 }
 
 
