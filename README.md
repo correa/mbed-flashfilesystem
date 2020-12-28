@@ -16,5 +16,5 @@ On Windows this can be done with the copy command. For example:
 
 # Original code.
 
-This repository is a fork from original author Adam Green on [os.mbed.com](https://os.mbed.com/users/AdamGreen/code/FlashFileSystem/)
+This repository is a port to mbed 6 from original author Adam Green for mbed 5 on [os.mbed.com](https://os.mbed.com/users/AdamGreen/code/FlashFileSystem/)
 
